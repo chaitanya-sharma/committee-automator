@@ -155,7 +155,7 @@ should list your NotebookLM notebooks (or an empty list, not an auth error) if l
 4. `nlm studio status` — polls until the artifact is ready
 5. `nlm download infographic` — downloads the PNG
 
-No notebook cleanup is automatic — old test/working notebooks will accumulate in your NotebookLM library over time; delete them from notebooklm.google.com periodically if that bothers you.
+6. `nlm notebook delete` — **by default, the notebook is permanently deleted once its images are downloaded**, so your NotebookLM library doesn't accumulate one throwaway notebook per article processed. This is a best-effort step (a delete failure is logged, not fatal — the pipeline keeps going and just leaves that notebook behind). If you need to keep a notebook around — e.g. to generate more variants against the same uploaded source later without re-uploading it — call `generate_background_candidates(..., cleanup_notebook=False)`.
 
 ### 5.4 Known limitation: rate limits
 

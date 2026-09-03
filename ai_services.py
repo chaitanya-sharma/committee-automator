@@ -120,12 +120,35 @@ def _wait_for_artifact(notebook_id, artifact_id, poll_interval=15, max_wait=300)
     return False
 
 
-def generate_background_candidates(article_text, output_dir, base_name, num_variants=4):
+def delete_notebook(notebook_id):
+    """
+    Permanently deletes a NotebookLM notebook. Best-effort: failures are
+    logged, not raised, so a cleanup hiccup never crashes the pipeline
+    (the notebook just gets left behind for manual cleanup instead).
+    """
+    try:
+        _nlm(["notebook", "delete", notebook_id, "--confirm"])
+        print(f"   -> [Deleted NotebookLM notebook {notebook_id} (cleanup)]")
+        return True
+    except Exception as e:
+        print(f"   -> [Could not delete notebook {notebook_id}, left it behind: {e}]")
+        return False
+
+
+def generate_background_candidates(article_text, output_dir, base_name, num_variants=4, cleanup_notebook=True):
     """
     Creates a NotebookLM notebook from the article, generates `num_variants`
     zero-text infographic candidates (drawn from NLM_VARIANTS), and returns
     their local file paths for review/selection. Requires `nlm` to be
     installed and authenticated (see: nlm login).
+
+    By default, the notebook is permanently deleted once all candidate
+    images have been downloaded (success or not) so NotebookLM's library
+    doesn't accumulate one throwaway notebook per article. Pass
+    cleanup_notebook=False if you need to keep the notebook around, e.g.
+    to regenerate more variants against the same uploaded source later
+    without re-uploading it (this is what saved a step during manual
+    redo passes in development - see the memory notes on Angad/Pranava).
     """
     os.makedirs(output_dir, exist_ok=True)
     variants = NLM_VARIANTS[:num_variants]
@@ -185,8 +208,9 @@ def generate_background_candidates(article_text, output_dir, base_name, num_vari
                 print(f"   -> [Giving up on downloading '{label}' after 3 attempts]")
 
         return candidates, notebook_id
-    except Exception:
-        raise
+    finally:
+        if cleanup_notebook:
+            delete_notebook(notebook_id)
 
 
 def generate_background_poster(article_text, image_prompt, output_path, num_variants=4):
