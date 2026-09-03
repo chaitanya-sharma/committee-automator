@@ -1,0 +1,14 @@
+# Secrets — never commit real versions of these
+.env
+credentials.json
+
+# Local runtime data (auto-created / dropped in by the user on first run)
+Article EMLs/*.eml
+Article EMLs/Completed/*.eml
+output/*
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.DS_Store
