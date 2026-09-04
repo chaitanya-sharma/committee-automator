@@ -3,6 +3,30 @@ import re
 import os
 import email.utils
 from email import policy
+
+
+def _ensure_pil_readable(image_path):
+    """
+    PIL can't open HEIC/HEIF (common for iPhone photo attachments) without
+    a plugin. If the attachment is one of those, convert it to JPEG so
+    composer.py's face-crop/compositing step doesn't silently skip the
+    photo. Any other format is returned unchanged.
+    """
+    ext = os.path.splitext(image_path)[1].lower()
+    if ext not in (".heic", ".heif"):
+        return image_path
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+        from PIL import Image
+        converted_path = os.path.splitext(image_path)[0] + ".jpg"
+        Image.open(image_path).convert("RGB").save(converted_path, "JPEG", quality=95)
+        return converted_path
+    except Exception as e:
+        print(f"   -> [Could not convert HEIC photo {image_path}: {e}]")
+        return image_path
+
+
 def parse_eml(file_path, output_dir):
     """
     Parses an EML file, extracts the text content, LinkedIn URL, and the first image attachment.
@@ -46,9 +70,10 @@ def parse_eml(file_path, output_dir):
             filename = part.get_filename()
             # Save the first image found as the student photo
             if not photo_path:
-                photo_path = os.path.join(output_dir, filename)
-                with open(photo_path, 'wb') as img_f:
+                raw_path = os.path.join(output_dir, filename)
+                with open(raw_path, 'wb') as img_f:
                     img_f.write(part.get_payload(decode=True))
+                photo_path = _ensure_pil_readable(raw_path)
 
     # If the email body is just a short cover note, prefer the markdown attachment as the article
     if markdown_attachment_text and len(markdown_attachment_text) > len(body_text):

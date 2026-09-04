@@ -14,7 +14,7 @@ This document is the full setup guide: what each piece does, the exact folder la
  .eml file
     │
     ▼
-eml_parser.py   ──▶  plain text, author name, LinkedIn URL, photo file
+eml_parser.py   ──▶  plain text, author name, LinkedIn URL, photo file (auto-converts HEIC/HEIF iPhone photos to JPEG via pillow-heif so composer.py can read them)
     │
     ▼
 ai_services.py  ──▶  Gemini: title, 5-paragraph summary, image prompt
