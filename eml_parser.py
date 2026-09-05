@@ -70,7 +70,15 @@ def parse_eml(file_path, output_dir):
             filename = part.get_filename()
             # Save the first image found as the student photo
             if not photo_path:
-                raw_path = os.path.join(output_dir, filename)
+                # Prefix with the source .eml's own filename so generic attachment
+                # names (photo.jpg, IMG_0001.jpg, etc.) from different students
+                # can't collide and silently overwrite each other on disk -
+                # especially on case-insensitive filesystems like macOS's default,
+                # where "photo.jpg" and "Photo.jpg" are literally the same file.
+                eml_stem = os.path.splitext(os.path.basename(file_path))[0]
+                safe_stem = re.sub(r'[^A-Za-z0-9_-]+', '_', eml_stem)[:60]
+                ext = os.path.splitext(filename)[1] or ".jpg"
+                raw_path = os.path.join(output_dir, f"{safe_stem}{ext}")
                 with open(raw_path, 'wb') as img_f:
                     img_f.write(part.get_payload(decode=True))
                 photo_path = _ensure_pil_readable(raw_path)
