@@ -148,33 +148,62 @@ def post_to_linkedin(access_token, text_content, image_path=None):
     else:
         raise Exception(f"Failed to post to LinkedIn: {post_resp.text}")
 
-def get_article_url(author_name):
+def _fetch_xplore_articles():
     """
-    Fetches the article URL from xploreadmin.xlri.ac.in matching the author's name.
+    Scrapes the live Xplore site's Next.js hydration payload for the current
+    list of published students-insight articles (slug, title, authorName,
+    authorLinkedin, publishedAt).
+
+    NOTE: xploreadmin.xlri.ac.in's WordPress REST API (the previous data
+    source here) is a stale/separate backend - it does not include articles
+    published on the current site (xplore.xlri.ac.in), which runs on a
+    different headless CMS. Confirmed 2026-09-05 by cross-checking a batch
+    of 15 known-published articles that all returned zero matches against
+    the WP API but matched cleanly here.
     """
-    if not author_name or author_name.strip() == "Unknown" or author_name.strip() == "Unknown Student":
-        return ""
-        
+    res = requests.get("https://xplore.xlri.ac.in/students-insight", timeout=20)
+    text = res.text.replace('\\"', '"').replace('\\\\', '\\')
+    pattern = re.compile(
+        r'"slug":"(?P<slug>[^"]+)".*?"title":"(?P<title>[^"]*)".*?'
+        r'"authorName":"(?P<author>[^"]*)".*?"authorLinkedin":"(?P<linkedin>[^"]*)".*?'
+        r'"publishedAt":"(?P<pub>[^"]*)"',
+        re.DOTALL
+    )
+    return [m.groupdict() for m in pattern.finditer(text)]
+
+
+def get_article_url_and_date(author_name):
+    """
+    Looks up a published article's live URL and publish date by author name.
+    Returns (url, date_str) - either may be "" if no match is found.
+    date_str is formatted "%d %b %Y" (e.g. "18 Sep 2026") to match the
+    Google Sheet's Date column convention.
+    """
+    if not author_name or author_name.strip().lower() in ("unknown", "unknown student"):
+        return "", ""
+
+    target = author_name.strip().lower()
     try:
-        url = "https://xploreadmin.xlri.ac.in/wp-json/wp/v2/students-insight?acf_format=standard&_fields=id,title,slug,acf&per_page=100"
-        page = 1
-        target_name = author_name.strip().lower()
-        
-        while page <= 5: # Limit to 5 pages
-            res = requests.get(f"{url}&page={page}").json()
-            if not res or (isinstance(res, dict) and 'code' in res):
-                break
-            
-            for item in res:
-                acf_author = item.get('acf', {}).get('author_name', '').strip().lower()
-                if not acf_author:
-                    continue
-                # Check for a match (target is in acf or acf is in target)
-                if target_name in acf_author or acf_author in target_name:
-                    return f"https://xplore.xlri.ac.in/students-insight/{item['slug']}"
-            
-            page += 1
+        for item in _fetch_xplore_articles():
+            author = item.get("author", "").strip().lower()
+            if not author:
+                continue
+            if target == author or target in author or author in target:
+                url = f"https://xplore.xlri.ac.in/students-insight/{item['slug']}"
+                date_str = ""
+                try:
+                    dt = datetime.datetime.fromisoformat(item["pub"].replace("Z", "+00:00"))
+                    date_str = dt.strftime("%d %b %Y")
+                except Exception:
+                    pass
+                return url, date_str
     except Exception as e:
         print(f"Error fetching article URL from Xplore: {e}")
-        
-    return ""
+
+    return "", ""
+
+
+def get_article_url(author_name):
+    """Back-compat wrapper: returns just the URL (see get_article_url_and_date)."""
+    url, _ = get_article_url_and_date(author_name)
+    return url

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from eml_parser import parse_eml
 from ai_services import generate_text_content, generate_background_poster
 from composer import compose_poster
-from operations import append_to_sheet, upload_to_imgbb, get_article_url
+from operations import append_to_sheet, upload_to_imgbb, get_article_url_and_date
 
 def run_batch():
     load_dotenv()
@@ -69,19 +69,21 @@ def run_batch():
                 print("   -> Uploading poster to ImgBB...")
                 poster_url = upload_to_imgbb(final_poster, imgbb_key)
             
-            # 5.5 Fetch Article URL
+            # 5.5 Fetch Article URL + real publish date from the live Xplore site
             print("   -> Fetching Article URL from Xplore Website...")
-            article_url = get_article_url(final_name)
+            article_url, published_date = get_article_url_and_date(final_name)
             if article_url:
-                print(f"   -> Found URL: {article_url}")
+                print(f"   -> Found URL: {article_url} (published {published_date})")
             else:
-                print(f"   -> No matching URL found for {final_name}")
+                print(f"   -> Not yet published on Xplore for {final_name}")
 
             # 6. Append to Google Sheet (New Row at the Bottom)
             print("   -> Appending new row to Google Sheet...")
             # Column order (see operations.SHEET_COLUMNS): Name, Date, Status, Headline, Short Description, Image Link, Linkedin, Website Article Link
-            email_date = parsed_data.get('email_date', '')
-            data = [final_name, email_date, '', title, summary, poster_url, parsed_data.get('linkedin_url', ''), article_url]
+            # Prefer the article's real Xplore publish date; fall back to the
+            # submission email's date if it isn't live yet (update later once published).
+            date_value = published_date or parsed_data.get('email_date', '')
+            data = [final_name, date_value, '', title, summary, poster_url, parsed_data.get('linkedin_url', ''), article_url]
             append_to_sheet(sheet_id, data)
             
             # 7. Move to Completed Folder
