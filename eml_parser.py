@@ -48,8 +48,15 @@ def parse_eml(file_path, output_dir):
 
     body_text = ""
     linkedin_url = None
-    photo_path = None
-    
+
+    # Collect image candidates separately by disposition rather than taking
+    # the first one found: some submissions embed figures/charts inline in
+    # the article body (disposition "inline") *and* attach a real headshot
+    # (disposition "attachment") - walk order isn't reliable, so a genuine
+    # attachment must always win over an inline body image.
+    attachment_images = []
+    inline_images = []
+
     markdown_attachment_text = ""
     for part in msg.walk():
         content_type = part.get_content_type()
@@ -65,27 +72,32 @@ def parse_eml(file_path, output_dir):
             # Some submissions send the article as a .md attachment instead of the email body
             markdown_attachment_text += part.get_content()
 
-        # Extract Image Attachment
+        # Collect image candidates
         if "image" in content_type and part.get_filename():
-            filename = part.get_filename()
-            # Save the first image found as the student photo
-            if not photo_path:
-                # Prefix with the source .eml's own filename so generic attachment
-                # names (photo.jpg, IMG_0001.jpg, etc.) from different students
-                # can't collide and silently overwrite each other on disk -
-                # especially on case-insensitive filesystems like macOS's default,
-                # where "photo.jpg" and "Photo.jpg" are literally the same file.
-                eml_stem = os.path.splitext(os.path.basename(file_path))[0]
-                safe_stem = re.sub(r'[^A-Za-z0-9_-]+', '_', eml_stem)[:60]
-                ext = os.path.splitext(filename)[1] or ".jpg"
-                raw_path = os.path.join(output_dir, f"{safe_stem}{ext}")
-                with open(raw_path, 'wb') as img_f:
-                    img_f.write(part.get_payload(decode=True))
-                photo_path = _ensure_pil_readable(raw_path)
+            target = attachment_images if content_disposition == "attachment" else inline_images
+            target.append(part)
 
     # If the email body is just a short cover note, prefer the markdown attachment as the article
     if markdown_attachment_text and len(markdown_attachment_text) > len(body_text):
         body_text = markdown_attachment_text
+
+    photo_path = None
+    chosen = (attachment_images or inline_images)
+    if chosen:
+        part = chosen[0]
+        filename = part.get_filename()
+        # Prefix with the source .eml's own filename so generic attachment
+        # names (photo.jpg, IMG_0001.jpg, etc.) from different students
+        # can't collide and silently overwrite each other on disk -
+        # especially on case-insensitive filesystems like macOS's default,
+        # where "photo.jpg" and "Photo.jpg" are literally the same file.
+        eml_stem = os.path.splitext(os.path.basename(file_path))[0]
+        safe_stem = re.sub(r'[^A-Za-z0-9_-]+', '_', eml_stem)[:60]
+        ext = os.path.splitext(filename)[1] or ".jpg"
+        raw_path = os.path.join(output_dir, f"{safe_stem}{ext}")
+        with open(raw_path, 'wb') as img_f:
+            img_f.write(part.get_payload(decode=True))
+        photo_path = _ensure_pil_readable(raw_path)
                     
     # Find LinkedIn URL in text
     # Basic regex for linkedin profiles (protocol and www. are both optional in source text)
